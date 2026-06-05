@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Shorts Author Labels
 // @namespace    https://github.com/VitaKaninen
-// @version      1.2.0
+// @version      1.2.1
 // @author       VitaKaninen
 // @description  Show each Short's channel name (clickable) to the right of its view count, on page load.
 // @match        https://www.youtube.com/*
@@ -14,6 +14,14 @@
 
 (function () {
   'use strict';
+
+  // Hover brightening needs a real :hover rule (inline styles can't do :hover).
+  const style = document.createElement('style');
+  style.textContent =
+    '.um-short-author{margin-left:4px;white-space:nowrap;text-decoration:none;' +
+    'color:inherit;cursor:pointer;transition:color .1s}' +
+    '.um-short-author:hover{color:var(--yt-spec-text-primary,#fff)}';
+  document.head.appendChild(style);
 
   const MAX_CONCURRENT = 4; // simultaneous oembed requests; raise/lower to taste
 
@@ -103,11 +111,6 @@
 
     const a = document.createElement('a');
     a.className = 'um-short-author';
-    a.style.marginLeft = '4px';
-    a.style.color = 'inherit';
-    a.style.textDecoration = 'none';
-    a.style.cursor = 'pointer';
-    a.style.whiteSpace = 'nowrap';
     // Channel click should not also trigger the Short's own link.
     a.addEventListener('click', (e) => e.stopPropagation());
     viewsEl.insertAdjacentElement('afterend', a);
