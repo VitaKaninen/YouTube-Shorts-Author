@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Shorts Author Labels
 // @namespace    https://github.com/VitaKaninen
-// @version      1.1.0
+// @version      1.2.0
 // @author       VitaKaninen
 // @description  Show each Short's channel name (clickable) to the right of its view count, on page load.
 // @match        https://www.youtube.com/*
