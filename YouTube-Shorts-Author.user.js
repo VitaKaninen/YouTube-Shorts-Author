@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         YouTube Shorts Author Labels
 // @namespace    https://github.com/VitaKaninen
-// @version      1.0.0
-// @author      VitaKaninen
-// @description  Show each Short's channel name to the right of its view count, on page load.
+// @version      1.1.0
+// @author       VitaKaninen
+// @description  Show each Short's channel name (clickable) to the right of its view count, on page load.
 // @match        https://www.youtube.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      youtube.com
@@ -30,9 +30,9 @@
     if (next) { active++; next(); }
   }
 
-  // --- author lookup via YouTube oembed (returns author_name, no API key needed) ---
-  const cache = new Map();    // vid -> author string (or null if unavailable)
-  const inflight = new Map(); // vid -> Promise<string|null>
+  // --- author lookup via YouTube oembed (returns author_name + author_url, no API key) ---
+  const cache = new Map();    // vid -> { name, url } | null
+  const inflight = new Map(); // vid -> Promise<{name,url}|null>
 
   function getAuthor(vid) {
     if (cache.has(vid)) return Promise.resolve(cache.get(vid));
@@ -47,9 +47,10 @@
             url: 'https://www.youtube.com/oembed?format=json&url=' +
                  encodeURIComponent('https://www.youtube.com/watch?v=' + vid),
             onload: (r) => {
-              let name = null;
-              try { name = JSON.parse(r.responseText).author_name || null; } catch (e) {}
-              resolve(name);
+              try {
+                const j = JSON.parse(r.responseText);
+                resolve(j.author_name ? { name: j.author_name, url: j.author_url || null } : null);
+              } catch (e) { resolve(null); }
             },
             onerror: () => resolve(null),   // embedding disabled / network error -> no label
             ontimeout: () => resolve(null),
@@ -59,10 +60,10 @@
       } finally {
         release();
       }
-    })().then((name) => {
-      cache.set(vid, name);
+    })().then((info) => {
+      cache.set(vid, info);
       inflight.delete(vid);
-      return name;
+      return info;
     });
 
     inflight.set(vid, p);
@@ -77,7 +78,7 @@
   function findViewsEl(container) {
     const els = container.querySelectorAll('*');
     for (const e of els) {
-      if (e.childElementCount === 0) {
+      if (e.childElementCount === 0 && !e.classList.contains('um-short-author')) {
         const t = e.textContent.trim();
         if (t.length < 40 && /\d.*\bviews\b/i.test(t)) return e;
       }
@@ -95,55 +96,55 @@
     return null;
   }
 
-  function getVid(lockup) {
-    const a = lockup.querySelector('a[href*="/shorts/"]');
-    const m = a && a.href.match(/\/shorts\/([\w-]+)/);
-    return m ? m[1] : null;
+  // Get or create the label, anchored to the view-count element so it can't duplicate.
+  function ensureLabel(viewsEl) {
+    const next = viewsEl.nextElementSibling;
+    if (next && next.classList.contains('um-short-author')) return next;
+
+    const a = document.createElement('a');
+    a.className = 'um-short-author';
+    a.style.marginLeft = '4px';
+    a.style.color = 'inherit';
+    a.style.textDecoration = 'none';
+    a.style.cursor = 'pointer';
+    a.style.whiteSpace = 'nowrap';
+    // Channel click should not also trigger the Short's own link.
+    a.addEventListener('click', (e) => e.stopPropagation());
+    viewsEl.insertAdjacentElement('afterend', a);
+    return a;
   }
 
-  function ensureSpan(lockup, viewsEl) {
-    let span = lockup._authorSpan;
-    if (span && span.isConnected) return span;
-    span = document.createElement('span');
-    span.className = 'um-short-author';
-    span.style.marginLeft = '4px';
-    span.style.opacity = '0.9';
-    span.style.whiteSpace = 'nowrap';
-    viewsEl.insertAdjacentElement('afterend', span); // directly to the right of the count
-    lockup._authorSpan = span;
-    return span;
-  }
-
-  async function processLockup(lockup) {
-    const vid = getVid(lockup);
-    if (!vid) return;
-    const viewsEl = findViewsEl(lockup);
-    if (!viewsEl) return;
-
-    const span = ensureSpan(lockup, viewsEl);
+  async function labelShort(viewsEl, vid) {
+    const a = ensureLabel(viewsEl);
 
     // DOM nodes can be reused for a different Short; refresh only when the video changes.
-    if (lockup._authorVid !== vid) {
-      span.textContent = '';
-      lockup._authorVid = vid;
-    } else if (span.textContent) {
-      return; // already labeled for this video
-    }
+    if (a.dataset.vid === vid && a.textContent) return; // already labeled for this video
+    a.dataset.vid = vid;
+    a.textContent = '';
+    a.removeAttribute('href');
 
-    const name = await getAuthor(vid);
-    if (getVid(lockup) !== vid) return; // node was reassigned mid-fetch
-    span.textContent = name ? ' \u00B7 ' + name : ''; // " · Channel Name"
+    const info = await getAuthor(vid);
+    if (a.dataset.vid !== vid) return; // reassigned mid-fetch
+    if (info) {
+      a.textContent = ' \u00B7 ' + info.name; // " · Channel Name"
+      if (info.url) a.href = info.url;
+    } else {
+      a.textContent = '';
+    }
   }
 
-  // --- scan the whole page; the views-element check filters out nav/other Shorts links ---
+  // --- scan the page; dedupe by the view-count element (one Short has several /shorts/ links) ---
   function scan() {
     const seen = new Set();
-    document.querySelectorAll('a[href*="/shorts/"]').forEach((a) => {
-      const lockup = lockupFor(a);
-      if (lockup && !seen.has(lockup)) {
-        seen.add(lockup);
-        processLockup(lockup);
-      }
+    document.querySelectorAll('a[href*="/shorts/"]').forEach((anchor) => {
+      const m = anchor.href.match(/\/shorts\/([\w-]+)/);
+      if (!m) return;
+      const lockup = lockupFor(anchor);
+      if (!lockup) return;
+      const viewsEl = findViewsEl(lockup);
+      if (!viewsEl || seen.has(viewsEl)) return;
+      seen.add(viewsEl);
+      labelShort(viewsEl, m[1]);
     });
   }
 
