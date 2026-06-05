@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Shorts Author Labels
 // @namespace    https://github.com/VitaKaninen
-// @version      1.2.1
+// @version      1.2.2
 // @author       VitaKaninen
 // @description  Show each Short's channel name (clickable) to the right of its view count, on page load.
 // @match        https://www.youtube.com/*
@@ -23,7 +23,7 @@
     '.um-short-author:hover{color:var(--yt-spec-text-primary,#fff)}';
   document.head.appendChild(style);
 
-  const MAX_CONCURRENT = 4; // simultaneous oembed requests; raise/lower to taste
+  const MAX_CONCURRENT = 5; // simultaneous oembed requests; raise/lower to taste
 
   // --- concurrency-limited gate ---
   let active = 0;
