@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Shorts Author Labels
 // @namespace    https://github.com/VitaKaninen
-// @version      1.2.2
+// @version      1.2.5
 // @author       VitaKaninen
 // @description  Show each Short's channel name (clickable) to the right of its view count, on page load.
 // @match        https://www.youtube.com/*
@@ -18,8 +18,11 @@
   // Hover brightening needs a real :hover rule (inline styles can't do :hover).
   const style = document.createElement('style');
   style.textContent =
-    '.um-short-author{margin-left:4px;white-space:nowrap;text-decoration:none;' +
+    '.um-short-author{margin-left:4px;display:inline-flex;align-items:flex-start;text-decoration:none;' +
     'color:inherit;cursor:pointer;transition:color .1s}' +
+    // Dot is a fixed-width prefix; only the name wraps, so its lines hang-indent under the first word.
+    '.um-short-author-sep{flex:0 0 auto;white-space:nowrap;margin-right:.35em}' +
+    '.um-short-author-name{min-width:0;white-space:normal;overflow-wrap:anywhere}' +
     '.um-short-author:hover{color:var(--yt-spec-text-primary,#fff)}';
   document.head.appendChild(style);
 
@@ -106,11 +109,28 @@
 
   // Get or create the label, anchored to the view-count element so it can't duplicate.
   function ensureLabel(viewsEl) {
+    // When another script (e.g. YouTube Watched Indicator) makes the subhead a flex row,
+    // the view-count span would otherwise shrink and wrap alongside a long author name.
+    // Pinning it keeps the count on one line; only the author label absorbs the wrap.
+    viewsEl.style.flexShrink = '0';
+    viewsEl.style.whiteSpace = 'nowrap';
+    // That same script aligns the row to center; force top-align so the view count (and the
+    // watched icon) stay at the top instead of dropping to center against a wrapped name.
+    const row = viewsEl.parentElement;
+    if (row) row.style.alignItems = 'flex-start';
+
     const next = viewsEl.nextElementSibling;
     if (next && next.classList.contains('um-short-author')) return next;
 
     const a = document.createElement('a');
     a.className = 'um-short-author';
+    const sep = document.createElement('span');
+    sep.className = 'um-short-author-sep';
+    sep.textContent = '·';                 // the "·" separator, kept on its own line
+    const name = document.createElement('span');
+    name.className = 'um-short-author-name';
+    a.append(sep, name);
+    a.style.display = 'none';                   // hidden until a name is fetched (no lone dot)
     // Channel click should not also trigger the Short's own link.
     a.addEventListener('click', (e) => e.stopPropagation());
     viewsEl.insertAdjacentElement('afterend', a);
@@ -119,20 +139,24 @@
 
   async function labelShort(viewsEl, vid) {
     const a = ensureLabel(viewsEl);
+    const nameEl = a.querySelector('.um-short-author-name');
 
     // DOM nodes can be reused for a different Short; refresh only when the video changes.
-    if (a.dataset.vid === vid && a.textContent) return; // already labeled for this video
+    if (a.dataset.vid === vid && nameEl.textContent) return; // already labeled for this video
     a.dataset.vid = vid;
-    a.textContent = '';
+    nameEl.textContent = '';
+    a.style.display = 'none';
     a.removeAttribute('href');
 
     const info = await getAuthor(vid);
     if (a.dataset.vid !== vid) return; // reassigned mid-fetch
     if (info) {
-      a.textContent = ' \u00B7 ' + info.name; // " · Channel Name"
+      nameEl.textContent = info.name; // " · Channel Name"
+      a.style.display = '';
       if (info.url) a.href = info.url;
     } else {
-      a.textContent = '';
+      nameEl.textContent = '';
+      a.style.display = 'none';
     }
   }
 
