@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Shorts Author Labels
 // @namespace    https://github.com/VitaKaninen
-// @version      1.2.5
+// @version      1.3.0
 // @author       VitaKaninen
 // @description  Show each Short's channel name (clickable) to the right of its view count, on page load.
 // @match        https://www.youtube.com/*
@@ -116,8 +116,13 @@
     viewsEl.style.whiteSpace = 'nowrap';
     // That same script aligns the row to center; force top-align so the view count (and the
     // watched icon) stay at the top instead of dropping to center against a wrapped name.
+    // Let the row wrap so a long author name drops to its own full-width line *under* the view
+    // count (where it wraps word-by-word) instead of being squeezed into a tall 1-char column.
     const row = viewsEl.parentElement;
-    if (row) row.style.alignItems = 'flex-start';
+    if (row) {
+      row.style.alignItems = 'flex-start';
+      row.style.flexWrap = 'wrap';
+    }
 
     const next = viewsEl.nextElementSibling;
     if (next && next.classList.contains('um-short-author')) return next;
