@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Shorts Author Labels
 // @namespace    https://github.com/VitaKaninen
-// @version      1.3.0
+// @version      1.4.0
 // @author       VitaKaninen
 // @description  Show each Short's channel name (clickable) to the right of its view count, on page load.
 // @match        https://www.youtube.com/*
@@ -91,16 +91,26 @@
     for (const e of els) {
       if (e.childElementCount === 0 && !e.classList.contains('um-short-author')) {
         const t = e.textContent.trim();
-        if (t.length < 40 && /\d.*\bviews\b/i.test(t)) return e;
+        if (/^(?:[\d.,]+\s*[KMB]?|no)\s+views?$/i.test(t)) return e;
       }
     }
     return null;
   }
 
+  // True when the container holds a link to a Short other than `vid`.
+  function hasOtherShort(n, vid) {
+    for (const a of n.querySelectorAll('a[href*="/shorts/"]')) {
+      const m = a.href.match(/\/shorts\/([\w-]+)/);
+      if (m && m[1] !== vid) return true;
+    }
+    return false;
+  }
+
   // Climb from a Short's anchor to the smallest container that also holds the view count.
-  function lockupFor(anchor) {
+  function lockupFor(anchor, vid) {
     let n = anchor;
     while (n && n !== document.body) {
+      if (hasOtherShort(n, vid)) return null; // left this Short's card: never borrow a neighbour's count
       if (findViewsEl(n)) return n;
       n = n.parentElement;
     }
@@ -171,7 +181,7 @@
     document.querySelectorAll('a[href*="/shorts/"]').forEach((anchor) => {
       const m = anchor.href.match(/\/shorts\/([\w-]+)/);
       if (!m) return;
-      const lockup = lockupFor(anchor);
+      const lockup = lockupFor(anchor, m[1]);
       if (!lockup) return;
       const viewsEl = findViewsEl(lockup);
       if (!viewsEl || seen.has(viewsEl)) return;
